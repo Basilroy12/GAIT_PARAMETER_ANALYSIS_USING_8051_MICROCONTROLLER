@@ -1,0 +1,192 @@
+CODE
+
+  #include <reg52.h>
+#define dataport P1
+sbit trig = P3^5;
+sbit RS = P2^0;
+sbit RW = P2^1;
+sbit E = P2^2;
+sbit pushButton = P3^4; // Connect the push button to P3.4
+sbit first= P2^3;
+
+int cms;
+float distance;
+unsigned int count = 0; // Global variable to store the count of push button presses
+unsigned int elapsed = 0; // Variable to store elapsed time in milliseconds
+unsigned int finalCount = 0; // Variable to store the final count value
+
+void send_command(unsigned int command_value);
+void send_data(unsigned int data_value);
+void ms_delay(unsigned int time);
+void delay(unsigned int msec) {
+  int i, j;
+  for(i = 0; i < msec; i++)
+    for(j = 0; j < 1275; j++);
+}
+
+void lcd_cmd(unsigned char item) {
+  dataport = item;
+  RS = 0;
+  RW = 0;
+  E = 1;
+  delay(1);
+  E = 0;
+}
+void lcd_data(unsigned char item) {
+  dataport = item;
+  RS = 1;
+  RW = 0;
+  E = 1;
+  delay(1);
+  E = 0;
+}
+void lcd_data_string(unsigned char *str) {
+  int i = 0;
+  while(str[i] != '\0') {
+    lcd_data(str[i]);
+    i++;
+    delay(1);
+  }
+}
+void send_pulse(void) {
+  TH0 = 0x00;
+  TL0 = 0x00;
+  trig = 1;
+  delay(5);
+  trig = 0;
+}
+
+
+unsigned int get_range(void) {
+  long int timer_val;
+  send_pulse();
+  while(!INT0);
+  while(INT0);
+  timer_val = (TH0 << 8) + TL0;
+  lcd_cmd(0x81);
+lcd_cmd(0x10);
+  lcd_data_string("Output:");
+  lcd_cmd(0x8A);
+  if(timer_val < 38000) {
+    cms = timer_val / 58;  // Calculate distance in centimeters
+    if(cms != 0) {
+      lcd_data(cms / 10 + 48);  // Display tens digit
+      lcd_data(cms % 10 + 48);  // Display ones digit
+    }
+    distance = cms / 100.0;  // Convert to meters (optional)
+  } else {
+    lcd_cmd(0x06);
+    lcd_data_string("Object out of range");
+    distance = 0.0;
+  }
+  return cms;
+}
+void send_command(unsigned int command_value) // Send command to LCD
+{
+    P1 = command_value;
+    RW = 0;
+    RS = 0;
+    E = 1;
+    ms_delay(10);
+    E = 0;
+}
+
+void send_data(unsigned int data_value) // Send data to LCD
+{
+    P1 = data_value;
+    RW = 0;
+    RS = 1;
+    E = 1;
+    ms_delay(10);
+    E = 0;
+}
+
+void ms_delay(unsigned int time)
+{
+    unsigned int i, j;
+
+    for (i = 0; i < time; i++)
+    {
+        for (j = 0; j < 113; j++);
+    }
+}
+
+
+
+
+void main()
+{
+
+pushButton=1;
+first=1;
+
+
+    // LCD INITIALIZATION
+    // 2 lines and 5x7 matrix
+    send_command(0x38);
+    // display on cursor blink
+    send_command(0x0E);
+    // clear display screen
+    send_command(0x01);
+
+while (first==0 )
+{
+   
+
+    while (elapsed < 60000)
+    {
+        if (pushButton == 0)
+        {
+            // Button is pressed, increment count by 1
+            count++;
+
+            RS = 0;
+            send_command(0x80); // Force cursor on 1st line and 1st column
+            send_data(count / 100 + 0x30);             // Display hundreds place
+            send_data((count / 10) % 10 + 0x30);       // Display tens place
+            send_data(count % 10 + 0x30);              // Display units place
+
+            // Wait until the button is released
+            while (pushButton == 0)
+            {
+                // Do nothing, wait for the button release
+            }
+        }
+
+        ms_delay(1); // Delay 1 millisecond
+        elapsed++;   // Increment elapsed time
+    }
+
+    finalCount = count*2; // Store the final count value
+   
+   
+        RS = 0;
+        send_command(0x80); // Force cursor on 1st line and 1st column
+        send_data(finalCount / 100 + 0x30);             // Display hundreds place
+        send_data((finalCount / 10) % 10 + 0x30);       // Display tens place
+        send_data(finalCount % 10 + 0x30);              // Display units place
+   
+}
+while(first==1)
+{
+
+lcd_cmd(0x38);
+  lcd_cmd(0x0C);
+  delay(2);
+  delay(2);
+  lcd_cmd(0x81);
+  delay(2);
+ 
+ 
+  TMOD = 0x09;
+  TR0 = 1;
+  TH0 = 0x00;
+  TL0 = 0x00;
+  P3 |= 0x04;
+ 
+    get_range();
+    delay(2);
+ 
+}
+}
+
